@@ -1,0 +1,53 @@
+services:
+  daemon:
+    image: ghcr.io/floatingsidewal/nanopilot:${NANOPILOT_VERSION:-latest}
+    volumes:
+      - ./workspace:/workspace:ro
+      - agent-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    environment:
+      # Pin persona image tag in lockstep with the daemon image. Without this,
+      # config.ts defaults personaContainerImage to `…/nanopilot-persona:latest`
+      # regardless of NANOPILOT_VERSION, so a daemon on `:develop` would spawn
+      # a persona on `:latest` — observed during the nanopilot-demo upgrade
+      # live test 2026-04-26 (Issue 5 in prd-spark-security-hardening.md).
+      # Override in .env if you need a different persona tag.
+      - NANOPILOT_PERSONA_CONTAINER_IMAGE=${NANOPILOT_PERSONA_CONTAINER_IMAGE:-ghcr.io/floatingsidewal/nanopilot-persona:${NANOPILOT_VERSION:-latest}}
+    ports:
+      - "${NANOPILOT_PORT:-3978}:3978"
+    # Linux Docker (LXC, Proxmox, bare-metal, remote-ssh) doesn't auto-inject
+    # host.docker.internal the way Docker Desktop does. The daemon probes the
+    # persona container at host.docker.internal:4321 (see
+    # src/persona-container-manager.ts); without this line the probe
+    # ENOTFOUNDs and every message stalls. Docker Desktop treats extra_hosts
+    # as a no-op on macOS/Windows, so it's safe everywhere.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # Build agent-specific persona image (extends nanopilot-persona).
+  # The persona container IS the agent runtime (bash, npm, ssh, agent-managed
+  # credentials) — see docs/persona-as-agent-runtime.md. This service only
+  # exists for the build step; the daemon spawns the actual persona container
+  # at runtime via PersonaContainerManager.
+  persona:
+    build:
+      context: .
+      dockerfile: Dockerfile.persona
+      args:
+        # Forward NANOPILOT_VERSION from .env into the Dockerfile's
+        # ARG NANOPILOT_VERSION so the persona base FROM picks up the
+        # operator's chosen tag. Defaults to latest when unset.
+        NANOPILOT_VERSION: ${NANOPILOT_VERSION:-latest}
+    image: {{AGENT_NAME}}-persona:latest
+    profiles:
+      - build
+
+volumes:
+  agent-data:
+  # nanopilot-session-state-* and nanopilot-ssh-keys-* volumes are created
+  # automatically by PersonaContainerManager when the persona container is
+  # first spawned; declaring them here is unnecessary (they are managed
+  # outside the compose lifecycle) but they will appear in `docker volume ls`.

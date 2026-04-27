@@ -1,0 +1,29 @@
+# {{DISPLAY_NAME}} Persona Image
+#
+# Extends the NanoPilot persona image with agent-specific CLIs / packages.
+# The persona container IS the agent runtime (bash, npm, ssh, agent-managed
+# credentials) — see docs/persona-as-agent-runtime.md in the platform repo.
+# Build: docker compose --profile build build
+# The daemon spawns this image at runtime via PersonaContainerManager.
+
+# Dockerfile FROM doesn't support docker-compose's `${VAR:-default}` shell
+# expansion — the parser fails / silently keeps the literal. Declare the ARG
+# above the FROM with a concrete default and reference it as `${NANOPILOT_VERSION}`.
+# Override at build time via:
+#   docker compose --profile build build --build-arg NANOPILOT_VERSION=develop persona
+# or have docker-compose forward it via build.args (the build profile in this
+# template forwards NANOPILOT_VERSION automatically when set in .env).
+ARG NANOPILOT_VERSION=latest
+FROM ghcr.io/floatingsidewal/nanopilot-persona:${NANOPILOT_VERSION}
+
+USER root
+
+# Add agent-specific npm packages (CLIs the agent will call from its own bash):
+# RUN npm install -g @your-org/cli@1.2.3
+
+# Add agent-specific system packages here:
+# RUN apt-get update && apt-get install -y --no-install-recommends \
+#       <your-packages> && \
+#     rm -rf /var/lib/apt/lists/*
+
+USER node

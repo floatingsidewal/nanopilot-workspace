@@ -1,0 +1,7 @@
+# Secrets: bind-mounted into the daemon container, never committed.
+credentials/
+ssh-keys/
+
+# Local runtime state.
+.env
+data/
